@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Floating Face Recorder</title>
+<style>
+body {
+  margin: 0;
+  background: #111;
+  color: white;
+  font-family: sans-serif;
+  overflow: hidden;
+}
+
+/* Camera video */
+#camera {
+  position: fixed;
+  width: 100vw;
+  height: 100vh;
+  object-fit: cover;
+}
+
+/* Face overlay */
+#faceBox {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  width: 180px;
+  height: 180px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 3px solid #00ffd5;
+  cursor: move;
+  resize: both;
+}
+
+/* Face video inside mask */
+#faceVideo {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Controls */
+#controls {
+  position: fixed;
+  bottom: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 10px;
+}
+
+button {
+  padding: 8px 12px;
+  background: #00ffd5;
+  border: none;
+  cursor: pointer;
+  font-weight: bold;
+}
+</style>
+</head>
+<body>
+
+<video id="camera" autoplay muted></video>
+
+<div id="faceBox">
+  <video id="faceVideo" autoplay muted></video>
+</div>
+
+<div id="controls">
+  <button onclick="toggleLock()">🔒 Lock</button>
+  <button onclick="toggleFace()">👁 Hide Face</button>
+  <button onclick="takePhoto()">📸 Photo</button>
+  <button onclick="toggleRecording()">🎥 Record</button>
+</div>
+
+<script>
+const camera = document.getElementById("camera");
+const faceVideo = document.getElementById("faceVideo");
+const faceBox = document.getElementById("faceBox");
+
+let locked = false;
+let faceVisible = true;
+let recording = false;
+let recorder;
+let chunks = [];
+
+/* Camera access */
+navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+  .then(stream => {
+    camera.srcObject = stream;
+    faceVideo.srcObject = stream;
+    window.stream = stream;
+  });
+
+/* Drag face */
+let offsetX, offsetY;
+faceBox.onmousedown = e => {
+  if (locked) return;
+  offsetX = e.clientX - faceBox.offsetLeft;
+  offsetY = e.clientY - faceBox.offsetTop;
+
+  document.onmousemove = e => {
+    faceBox.style.left = (e.clientX - offsetX) + "px";
+    faceBox.style.top = (e.clientY - offsetY) + "px";
+  };
+
+  document.onmouseup = () => {
+    document.onmousemove = null;
+  };
+};
+
+/* Lock movement */
+function toggleLock() {
+  locked = !locked;
+  alert(locked ? "Face locked" : "Face unlocked");
+}
+
+/* Hide / show face */
+function toggleFace() {
+  faceVisible = !faceVisible;
+  faceBox.style.display = faceVisible ? "block" : "none";
+}
+
+/* Take photo */
+function takePhoto() {
+  const canvas = document.createElement("canvas");
+  canvas.width = camera.videoWidth;
+  canvas.height = camera.videoHeight;
+  const ctx = canvas.getContext("2d");
+
+  ctx.drawImage(camera, 0, 0);
+
+  if (faceVisible) {
+    const rect = faceBox.getBoundingClientRect();
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(
+      rect.left + rect.width / 2,
+      rect.top + rect.height / 2,
+      rect.width / 2,
+      0,
+      Math.PI * 2
+    );
+    ctx.clip();
+    ctx.drawImage(camera, rect.left, rect.top, rect.width, rect.height);
+    ctx.restore();
+  }
+
+  const img = document.createElement("a");
+  img.href = canvas.toDataURL("image/png");
+  img.download = "photo.png";
+  img.click();
+}
+
+/* Record video */
+function toggleRecording() {
+  if (!recording) {
+    recorder = new MediaRecorder(stream);
+    recorder.ondataavailable = e => chunks.push(e.data);
+    recorder.onstop = () => {
+      const blob = new Blob(chunks, { type: "video/webm" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "recording.webm";
+      a.click();
+      chunks = [];
+    };
+    recorder.start();
+    recording = true;
+    alert("Recording started");
+  } else {
+    recorder.stop();
+    recording = false;
+    alert("Recording stopped");
+  }
+}
+</script>
+
+</body>
+</html>
